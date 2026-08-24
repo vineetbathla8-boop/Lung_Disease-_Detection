@@ -46,6 +46,7 @@ htmlcov/
 
 # Project data
 Data/
+model_1_dataset/
 
 # Temporary files
 tempCodeRunnerFile.py
