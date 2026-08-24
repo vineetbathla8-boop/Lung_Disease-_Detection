@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lung Disease Detection</title>
+<style>
+:root{
+                    
+  --bg-image:url("https://imgs.search.brave.com/WvN4s3MDZ-o7oI6dn4PSlpM_3jHRBawZpPiIbQGEEjA/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly90aHVt/YnMuZHJlYW1zdGlt/ZS5jb20vYi9odW1h/bi1sdW5ncy1kaWdp/dGFsLXNjYW4tbWVk/aWNhbC1kaXNwbGF5/LXZpc3VhbGl6aW5n/LXJlc3BpcmF0b3J5/LXN5c3RlbS1oZWFs/dGgtdGVjaG5vbG9n/eS1kaXNlYXNlLWRp/YWdub3Npcy1hZHZh/bmNlZC1zY3JlZW4t/NDI4MTQwODMxLmpw/Zw");
+  --bg-fallback:#0A1E26;
+
+  --glass:rgba(11,40,50,.38);
+  --glass-edge:rgba(255,255,255,.20);
+  --well:rgba(255,255,255,.07);
+  --well-edge:rgba(255,255,255,.16);
+
+  --ink:#EAF6F8;
+  --muted:#A6C4CD;
+  --line:rgba(255,255,255,.16);
+  --accent:#3FD9C4;
+  --accent-solid:#12B3A0;
+  --ok:#5BE39B;
+  --alert:#FF8FA0;
+  --danger:#FF6070;
+  --font:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;padding:36px 20px 88px;
+  display:grid;place-items:center;
+  font-family:var(--font);color:var(--ink);
+  background:var(--bg-fallback);
+  -webkit-font-smoothing:antialiased;
+  position:relative;overflow-x:hidden;
+}
+
+
+.bg-photo{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-color:var(--bg-fallback);
+  background-image:var(--bg-image);
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  animation:driftzoom 32s ease-in-out infinite alternate;
+}
+.bg-photo::after{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(120% 90% at 50% 45%, rgba(6,22,29,.22) 0%, rgba(6,22,29,.55) 70%, rgba(4,16,22,.74) 100%);
+}
+@keyframes driftzoom{
+  from{transform:scale(1)}
+  to{transform:scale(1.09)}
+}
+
+/* heartbeat trace, sits behind the glass so it blurs through it */
+.bg-ecg{
+  position:fixed;left:0;right:0;top:50%;height:80px;margin-top:-40px;
+  z-index:1;pointer-events:none;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='80' viewBox='0 0 400 80'%3E%3Cpath d='M0 40 H100 q6 -9 12 0 H124 L130 49 L136 18 L142 58 L148 40 H164 q10 -13 20 0 H400' fill='none' stroke='%234FE3CE' stroke-opacity='0.4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:repeat-x;
+  background-size:400px 80px;
+  animation:trace 9s linear infinite;
+}
+@keyframes trace{
+  from{background-position-x:0}
+  to{background-position-x:-400px}
+}
+
+/* ---------------- glass card ---------------- */
+.card{
+  position:relative;z-index:2;
+  width:100%;max-width:520px;
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  backdrop-filter:blur(22px) saturate(150%);
+  border:1px solid var(--glass-edge);
+  border-radius:20px;
+  box-shadow:
+    0 30px 70px -20px rgba(0,0,0,.60),
+    inset 0 1px 0 rgba(255,255,255,.22);
+  padding:38px 34px 32px;
+  overflow:hidden;
+}
+@supports not ((backdrop-filter:blur(2px)) or (-webkit-backdrop-filter:blur(2px))){
+  .card{background:rgba(9,33,42,.90)}
+}
+
+/* indeterminate bar while the request is in flight */
+.bar{position:absolute;top:0;left:0;right:0;height:3px;background:var(--line);opacity:0;transition:opacity .2s}
+.bar i{display:block;height:100%;width:36%;background:var(--accent);border-radius:0 3px 3px 0}
+body.busy .bar{opacity:1}
+body.busy .bar i{animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
+
+/* ---------------- lungs ---------------- */
+.emblem{position:relative;width:104px;height:104px;margin:0 auto 22px}
+.ring{
+  position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(63,217,196,.65);
+  opacity:0;animation:pulse 4s ease-out infinite;
+}
+.ring:nth-child(2){animation-delay:2s}
+@keyframes pulse{
+  0%{transform:scale(.62);opacity:.5}
+  80%{transform:scale(1.12);opacity:0}
+  100%{opacity:0}
+}
+.emblem svg{
+  position:absolute;inset:0;width:100%;height:100%;
+  transform-origin:50% 46%;
+  animation:breathe 5s cubic-bezier(.45,0,.35,1) infinite;
+}
+@keyframes breathe{
+  0%,100%{transform:scale(1)}
+  42%{transform:scale(1.075)}
+  64%{transform:scale(1.05)}
+}
+
+h1{font-size:24px;font-weight:600;letter-spacing:-.015em;text-align:center;margin:0 0 8px}
+.sub{font-size:14.5px;line-height:1.6;color:var(--muted);text-align:center;margin:0 0 28px}
+
+/* ---------------- upload ---------------- */
+.drop{
+  display:block;position:relative;cursor:pointer;text-align:center;
+  padding:30px 22px;border:1.5px dashed rgba(255,255,255,.28);border-radius:14px;
+  background:var(--well);transition:border-color .18s,background .18s;
+}
+.drop:hover,.drop.over{border-color:var(--accent);background:rgba(63,217,196,.13)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+.drop input[type=file]{position:absolute;inset:0;margin:auto;width:1px;height:1px;opacity:0}
+.drop svg{display:block;margin:0 auto 12px;color:var(--accent)}
+.drop-title{margin:0 0 5px;font-size:15px;font-weight:500}
+.drop-hint{margin:0;font-size:12.5px;color:var(--muted)}
+
+.thumb{display:none;align-items:center;gap:13px;margin-top:14px;padding:11px 13px;border:1px solid var(--well-edge);border-radius:12px;background:var(--well)}
+.thumb.show{display:flex}
+.thumb img{width:52px;height:52px;object-fit:cover;border-radius:9px;background:rgba(255,255,255,.10);flex:none}
+.thumb .meta{min-width:0;flex:1}
+.thumb .n{display:block;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thumb .s{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.thumb button{border:0;background:none;color:var(--muted);font-size:19px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:6px}
+.thumb button:hover{color:var(--alert);background:rgba(255,143,160,.16)}
+
+.err{display:none;margin:12px 0 0;font-size:13px;line-height:1.5;color:var(--alert)}
+.err.show{display:block}
+
+.run{
+  width:100%;margin-top:20px;padding:15px 20px;
+  font-family:inherit;font-size:15px;font-weight:600;letter-spacing:.01em;
+  color:#04252A;background:var(--accent);border:0;border-radius:12px;cursor:pointer;
+  transition:background .18s,transform .06s;
+}
+.run:hover{background:#5FEAD6}
+.run:active{transform:translateY(1px)}
+.run:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+body.busy .run{pointer-events:none;background:rgba(63,217,196,.45);color:rgba(4,37,42,.7)}
+
+/* ---------------- result ---------------- */
+.result{display:none;margin-top:26px;padding:18px 20px;border-radius:14px;background:var(--well);border-left:4px solid var(--muted)}
+.result.show{display:block;animation:rise .4s ease-out both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.label{margin:0 0 6px;font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.verdict{margin:0;font-size:21px;font-weight:600;letter-spacing:-.01em;line-height:1.3;word-break:break-word}
+.result[data-tone=ok]{border-left-color:var(--ok);background:rgba(91,227,155,.14)}
+.result[data-tone=ok] .verdict{color:var(--ok)}
+.result[data-tone=alert]{border-left-color:var(--alert);background:rgba(255,143,160,.14)}
+.result[data-tone=alert] .verdict{color:var(--alert)}
+.meter{display:none;height:6px;margin-top:14px;border-radius:3px;background:rgba(255,255,255,.16);overflow:hidden}
+.meter.show{display:block}
+.meter i{display:block;height:100%;width:0;background:currentColor;border-radius:3px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.conf{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+
+
+body:has(h1[style*="crimson"])::before{
+  content:"";
+  position:fixed;inset:0;z-index:3;
+  background:rgba(4,14,19,.64);
+  -webkit-backdrop-filter:blur(5px);
+  backdrop-filter:blur(5px);
+  animation:popFade .28s ease-out both;
+}
+/* lift the card above that dim, and stop it clipping the popup */
+body:has(h1[style*="crimson"]) .card{z-index:6;overflow:visible}
+/* dim the card's own contents too, so the popup is the only bright thing */
+body:has(h1[style*="crimson"]) .card::after{
+  content:"";
+  position:absolute;inset:0;z-index:5;
+  border-radius:inherit;
+  background:rgba(4,14,19,.58);
+  -webkit-backdrop-filter:blur(3px);
+  backdrop-filter:blur(3px);
+  animation:popFade .28s ease-out both;
+}
+
+/* the popup itself — pinned to the middle of the screen */
+.card h1[style*="crimson"]{
+  position:fixed;
+  inset:0;
+  margin:auto;
+  z-index:7;
+  width:min(384px, calc(100vw - 64px));
+  height:-moz-fit-content;
+  height:fit-content;
+  padding:28px 26px 26px;
+  border-radius:18px;
+  text-align:center;
+  font-size:18px;
+  font-weight:700;
+  line-height:1.4;
+  letter-spacing:0;
+  color:var(--danger)!important;
+  background:rgba(52,17,26,.94);
+  -webkit-backdrop-filter:blur(20px) saturate(150%);
+  backdrop-filter:blur(20px) saturate(150%);
+  border:1px solid rgba(255,96,112,.55);
+  animation:popIn .4s cubic-bezier(.2,.9,.3,1.25) both,
+            popGlow 2.2s .45s ease-out infinite;
+}
+
+/* warning triangle above the text */
+.card h1[style*="crimson"]::before{
+  content:"";
+  display:block;
+  width:56px;height:56px;
+  margin:0 auto 16px;
+  border-radius:50%;
+  border:1px solid rgba(255,96,112,.55);
+  background:rgba(255,96,112,.18)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FF6070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E")
+    center / 28px 28px no-repeat;
+  animation:popShake .55s .25s both;
+}
+
+/* helper line under the message */
+.card h1[style*="crimson"]::after{
+  content:"Please select a valid chest radiograph and try again.";
+  display:block;
+  margin-top:10px;
+  font-size:13px;
+  font-weight:400;
+  line-height:1.6;
+  color:#E7CBD1;
+}
+
+@keyframes popFade{
+  from{opacity:0}
+  to{opacity:1}
+}
+@keyframes popIn{
+  from{opacity:0;transform:scale(.86) translateY(-12px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+@keyframes popGlow{
+  0%{box-shadow:0 26px 60px -18px rgba(0,0,0,.7),0 0 0 0 rgba(255,96,112,.45)}
+  70%,100%{box-shadow:0 26px 60px -18px rgba(0,0,0,.7),0 0 0 20px rgba(255,96,112,0)}
+}
+@keyframes popShake{
+  0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-8px)}
+  36%{transform:translateX(7px)}
+  54%{transform:translateX(-5px)}
+  72%{transform:translateX(3px)}
+  86%{transform:translateX(-1px)}
+}
+
+.note{margin:22px 0 0;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.6;color:var(--muted);text-align:center}
+
+/* ---------------- author credit, bottom left ---------------- */
+.credit{
+  position:fixed;left:20px;bottom:18px;z-index:4;
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  max-width:calc(100% - 40px);
+}
+.credit .who,.credit a{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:999px;
+  background:rgba(11,40,50,.45);
+  -webkit-backdrop-filter:blur(14px) saturate(150%);
+  backdrop-filter:blur(14px) saturate(150%);
+  border:1px solid rgba(255,255,255,.18);
+  font-size:12px;line-height:1;white-space:nowrap;
+}
+.credit .who{color:var(--muted);font-weight:400}
+.credit .who b{color:var(--ink);font-weight:600}
+.credit a{
+  color:var(--ink);text-decoration:none;font-weight:500;
+  transition:background .18s,border-color .18s,transform .06s;
+}
+.credit a:hover{background:rgba(63,217,196,.22);border-color:var(--accent)}
+.credit a:active{transform:translateY(1px)}
+.credit a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.credit svg{width:14px;height:14px;flex:none}
+
+@media (max-width:520px){
+  .card{padding:30px 22px 26px;border-radius:16px}
+  h1{font-size:21px}
+  .card h1[style*="crimson"]{font-size:17px;padding:24px 20px 22px}
+  .credit{left:14px;bottom:14px;gap:6px}
+  .credit .who,.credit a{padding:5px 10px;font-size:11.5px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,.bg-photo,.bg-ecg{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="bg-photo" aria-hidden="true"></div>
+<div class="bg-ecg" aria-hidden="true"></div>
+
+<div class="card">
+  <div class="bar"><i></i></div>
+
+  <div class="emblem" aria-hidden="true">
+    <span class="ring"></span><span class="ring"></span>
+    <svg viewBox="0 0 64 64" fill="none" stroke="#3FD9C4" stroke-width="2.2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 9v13"/>
+      <path d="M32 22c0 4-3 5.5-6 7"/>
+      <path d="M32 22c0 4 3 5.5 6 7"/>
+      <path d="M26 29c-8 2-14 11-14 19 0 7 5 10 9 7 4-3 6-11 6-19 0-3 0-6-1-7z" fill="rgba(63,217,196,.20)"/>
+      <path d="M38 29c8 2 14 11 14 19 0 7-5 10-9 7-4-3-6-11-6-19 0-3 0-6 1-7z" fill="rgba(63,217,196,.20)"/>
+    </svg>
+  </div>
+
+  <h1>Lung Disease Detection</h1>
+  <p style="text-align: center" class="sub">Upload a chest X-ray</p>
+
+  <form method="POST" action="/checker" enctype="multipart/form-data" id="form">
+
+    <label class="drop" id="drop">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/>
+      </svg>
+      <p class="drop-title">Choose an X-ray image</p>
+      <p class="drop-hint">Drag and drop, or click to browse &middot; JPG or PNG, up to 16 MB</p>
+      <input name="inp_file" type="file" id="file" accept="image/*" required>
+    </label>
+
+    <div class="thumb" id="thumb">
+      <img id="thumbImg" alt="Selected X-ray">
+      <span class="meta"><span class="n" id="fname"></span><span class="s" id="fsize"></span></span>
+      <button type="button" id="clear" aria-label="Remove selected file">&times;</button>
+    </div>
+
+    <p class="err" id="err"></p>
+
+    <button class="run" type="submit" id="run">Run Analysis</button>
+  </form>
+
+  {% if name == "Others" %}
+
+    <h1 style="color: crimson;">Upload only Chest X-Ray photo</h1>
+
+{% else %}
+
+    <div class="result"
+         id="result"
+         data-prediction="{{ prediction }}"
+         data-confidence="{{ confidence }}">
+
+        <p class="label">Prediction</p>
+        <p class="verdict" id="verdict"></p>
+
+        <div class="meter" id="meter">
+            <i id="meterFill"></i>
+        </div>
+
+        <p class="conf" id="conf"></p>
+
+    </div>
+
+{% endif %}
+
+  
+  <p class="note">For research and educational use. Not a substitute for a radiologist's report.</p>
+</div>
+
+<!-- ---------------- author credit ---------------- -->
+<div class="credit">
+  <span class="who">Built by&nbsp;<b>Vineet Bhatla</b></span>
+
+  <a href="https://github.com/vineetbathla8-boop/Lung_Disease-_Detection"
+     target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.32.47-2.39 1.24-3.23-.13-.3-.54-1.53.11-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"/>
+    </svg>
+    GitHub
+  </a>
+
+  <a href="https://www.linkedin.com/in/vineet-bhatla-235710294"
+     target="_blank" rel="noopener noreferrer" aria-label="LinkedIn profile">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05a3.74 3.74 0 0 1 3.37-1.85c3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.07 2.07 0 1 1 0-4.14 2.07 2.07 0 0 1 0 4.14zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/>
+    </svg>
+    LinkedIn
+  </a>
+</div>
+
+<script>
+(function () {
+  var file   = document.getElementById('file');
+  var drop   = document.getElementById('drop');
+  var thumb  = document.getElementById('thumb');
+  var img    = document.getElementById('thumbImg');
+  var fname  = document.getElementById('fname');
+  var fsize  = document.getElementById('fsize');
+  var err    = document.getElementById('err');
+  var form   = document.getElementById('form');
+  var MAX    = 16 * 1024 * 1024;
+
+  function fail(m){ err.textContent = m; err.classList.add('show'); }
+  function reset(){
+    err.classList.remove('show');
+    thumb.classList.remove('show');
+    file.value = '';
+  }
+
+  function accept(f){
+    err.classList.remove('show');
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { reset(); fail("That file isn't an image. Choose a JPG or PNG."); return; }
+    if (f.size > MAX) { reset(); fail('That file is ' + (f.size/1048576).toFixed(1) + ' MB. The limit is 16 MB.'); return; }
+    fname.textContent = f.name;
+    fsize.textContent = (f.size/1024).toFixed(0) + ' KB';
+    img.src = URL.createObjectURL(f);
+    thumb.classList.add('show');
+  }
+
+  file.addEventListener('change', function(){ accept(this.files[0]); });
+  document.getElementById('clear').addEventListener('click', reset);
+
+  ['dragenter','dragover'].forEach(function(e){
+    drop.addEventListener(e, function(ev){ ev.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(e){
+    drop.addEventListener(e, function(ev){ ev.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function(ev){
+    if (!ev.dataTransfer.files.length) return;
+    file.files = ev.dataTransfer.files;
+    accept(ev.dataTransfer.files[0]);
+  });
+
+  form.addEventListener('submit', function(ev){
+    if (!file.files.length) { ev.preventDefault(); fail('Choose an X-ray image first.'); return; }
+    document.body.classList.add('busy');
+    document.getElementById('run').textContent = 'Analysing\u2026';
+  });
+
+  // render whatever Flask passed in
+  var result = document.getElementById('result');
+  if (!result) return;
+  var raw    = (result.dataset.prediction || '').trim();
+  var conf   = (result.dataset.confidence || '').trim();
+
+  if (!raw || raw.charAt(0) === '{' || raw === 'None') return;
+
+  document.getElementById('verdict').textContent = raw;
+  result.classList.add('show');
+  result.dataset.tone = /\b(normal|healthy|no finding|negative|clear)\b/i.test(raw) ? 'ok' : 'alert';
+
+  var pct = parseFloat(conf);
+  if (!isNaN(pct)) {
+    if (pct <= 1) pct *= 100;
+    pct = Math.max(0, Math.min(100, pct));
+    document.getElementById('meter').classList.add('show');
+    document.getElementById('conf').textContent = 'Confidence ' + pct.toFixed(1) + '%';
+    requestAnimationFrame(function(){ document.getElementById('meterFill').style.width = pct + '%'; });
+  }
+})();
+</script>
+</body>
+</html>
